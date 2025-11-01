@@ -1,6 +1,8 @@
 #pragma once
 
+// std
 #include <memory>
+#include <shared_mutex>
 #include <vector>
 
 #include "Fibers/Fiber.hpp"
@@ -8,38 +10,67 @@
 class Scheduler
 {
 public:
-    void addFiber(std::unique_ptr<Fiber>&& fiber) {
-        m_fibers.emplace_back(std::move(fiber));
+    template<typename Func>
+    requires std::is_invocable_v<Func>
+    FiberId createFiber(Func&& func) {
+        FiberId id = m_lastId.fetch_add(1, std::memory_order_relaxed);
+        auto fiber = std::make_unique<Fiber>(std::forward<Func>(func));
+        {
+            std::unique_lock lock(m_mutex);
+            m_fibers.emplace(id, std::move(fiber));
+        }
+        return m_lastId;
     }
 
-    void switchFiber(std::unique_ptr<Fiber>& next_fiber) {
-        if (next_fiber) {
-            m_current_fiber = std::move(next_fiber);
-            m_current_fiber->run();
+    template<typename T>
+    T getResult(FiberId id) {
+        Fiber* fiber = getFiber(id);
+        if (!fiber) {
+            return {};
+        }
+        return fiber->getResult<T>();
+    }
+
+    template<typename... Args>
+    void invokeFiber(FiberId id, Args&&... args) {
+        Fiber* fiber = getFiber(id);
+        if (!fiber) {
+            return;
+        }
+        fiber->invoke(std::forward<Args>(args)...);
+    }
+
+    template<typename... Args>
+    void switchFiber(FiberId from, FiberId to, Args&&...args) {
+        Fiber* fiber_from = getFiber(from);
+        Fiber* fiber_to = getFiber(to);
+        if (!fiber_from || !fiber_to) {
+            return;
+        }
+        FiberState state_from = fiber_from->getState();
+        FiberState state_to = fiber_to->getState();
+        if (state_from != FiberState::running) {
+            return;
+        }
+        if ((state_to != FiberState::stopped) && (state_to != FiberState::created)) {
+            return;
+        }
+
+        fiber_from->stop();
+        if (state_to == FiberState::created) {
+            fiber_to->invoke(std::forward<Args>(args)...);
+        } else {
+            fiber_to->resume();
         }
     }
 
-//    void resumeAll() {
-//
-//    }
-
-    void run() {
-        for (auto& fiber: m_fibers) {
-            switchFiber(fiber);
-        }
-    }
-
-    const std::unique_ptr<Fiber>& getCurrentFiber() const { return m_current_fiber;}
-
-    void resumeCurrentFiber() {
-        if (m_current_fiber->getState() == FiberState::stopped) {
-            m_current_fiber->resume();
-        }
-    }
+    Fiber* getFiber(FiberId id);
+    void stopFiber(FiberId id);
 
 private:
-    std::vector<std::unique_ptr<Fiber>> m_fibers;
-    std::unique_ptr<Fiber> m_current_fiber;
+    std::unordered_map<FiberId, std::unique_ptr<Fiber>> m_fibers;
+    std::shared_mutex m_mutex;
+    std::atomic<FiberId> m_lastId = 0;
 };
 
 

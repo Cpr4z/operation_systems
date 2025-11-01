@@ -1,18 +1,16 @@
 #pragma once
 
-#include <functional>
-#include <memory>
-#include <future>
+// std
 #include <any>
-
+#include <functional>
 #include <iostream>
+#include <memory>
 
+// boost
 #include <boost/noncopyable.hpp>
 
-#include <Constants/Constants.hpp>
-
+#include "Constants/Constants.hpp"
 #include "Scheduler/ContextSwitcher.hpp"
-
 #include "IFiber.hpp"
 
 namespace {
@@ -45,11 +43,12 @@ namespace {
 template<typename Func>
 requires std::is_invocable_v<Func>
 class FiberWrapper : public IFiber {
-public:
+private:
     using traits = function_traits<typename std::remove_reference_t<Func>>;
     using ReturnT = typename traits::return_type;
     using ArgsTuple = typename traits::args_tuple;
 
+public:
     explicit FiberWrapper(Func&& f) : m_func(std::forward<Func>(f))
     {
         size_t aligned_size = ((sizeof(Context) + 15) / 16) * 16;
@@ -70,7 +69,7 @@ public:
         }
 
         if (m_state == FiberState::created || m_state == FiberState::stopped) {
-            saveContext(m_stack, m_context);
+            saveContext(m_context, m_stack);
         }
         if constexpr (std::is_void_v<ReturnT>) {
             m_func();
@@ -78,12 +77,12 @@ public:
             m_result = m_func();
         }
         m_state = FiberState::completed;
-        saveContext(m_stack, m_context);
+        saveContext(m_context, m_stack);
     }
 
     void stop() override {
         if (m_state != FiberState::stopped) {
-            saveContext(m_stack, m_context);
+            saveContext(m_context, m_stack);
             m_state = FiberState::stopped;
         }
     }
@@ -93,7 +92,7 @@ public:
             return;
         }
         m_state = FiberState::running;
-        restoreContext(m_stack, m_context);
+        restoreContext(m_context, m_stack);
     }
 
     void yield() override {
@@ -104,13 +103,11 @@ public:
         callFromAny(args, std::make_index_sequence<std::tuple_size_v<ArgsTuple>>{});
     }
 
-    [[nodiscard]] FiberState getState() const override {
-        return m_state;
-    }
+    [[nodiscard]] FiberState getState() const override { return m_state; }
 
     [[nodiscard]] FiberId getId() const { return m_id; }
 
-    std::any getResult() const override {
+    [[nodiscard]] std::any getResult() const override {
         if constexpr (std::is_void_v<ReturnT>) {
             return {};
         } else {
@@ -158,12 +155,13 @@ public:
     void yield();
 
     template<typename T>
-    T getResult() {
+    T getResult() const {
         try {
             return std::any_cast<T>(m_impl->getResult());
         } catch (const std::bad_any_cast& e) {
             std::cout << e.what() << std::endl;
         }
+        return {};
     }
 
     template<typename... Args>
