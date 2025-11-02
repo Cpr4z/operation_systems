@@ -15,7 +15,8 @@ set(HEADERS
     Fibers/IFiber.hpp
     Scheduler/Scheduler.hpp
     Constants/Constants.hpp
-    Scheduler/ContextSwitcher.hpp)
+    Scheduler/ContextSwitcher.hpp
+    Scheduler/Utils.hpp)
 
 set(SOURCES
     Channels/Channel.cpp

@@ -1,83 +1,54 @@
 #include "ContextSwitcher.hpp"
 
 extern "C" {
-void saveContext(void* ctx, void* stackPtr) {
+int saveContext(Context* ctx) {
+    int ret = 0;
     __asm__ __volatile__ (
-        // сохраняем регистры x0–x30
-            "stp x0, x1, [sp, -16]!;"
-            "stp x2, x3, [sp, -16]!;"
-            "stp x4, x5, [sp, -16]!;"
-            "stp x6, x7, [sp, -16]!;"
-            "stp x8, x9, [sp, -16]!;"
-            "stp x10, x11, [sp, -16]!;"
-            "stp x12, x13, [sp, -16]!;"
-            "stp x14, x15, [sp, -16]!;"
-            "stp x16, x17, [sp, -16]!;"
-            "stp x18, x19, [sp, -16]!;"
-            "stp x20, x21, [sp, -16]!;"
-            "stp x22, x23, [sp, -16]!;"
-            "stp x24, x25, [sp, -16]!;"
-            "stp x26, x27, [sp, -16]!;"
-            "stp x28, x29, [sp, -16]!;"
-            "stp x30, lr, [sp, -16]!;"
-
-            // Сохранение sp (stack pointer)
-            "mov x1, sp;"
-            "str x1, [sp, -8]!;"  // сохраняем sp в контекст
-
-            // Сохранение текущего значения pc (program counter)
-            "adr x2, .;"
-            "str x2, [sp, -16]!"   // сохраняем pc в контекст
-
-            : "=r"(ctx)  // выводим указатель на контекст
-            :           // нет входных аргументов
-            : "memory", "x1", "x2"  // указываем использованные регистры
+            "stp x19, x20, [%1, #0];"
+            "stp x21, x22, [%1, #16];"
+            "stp x23, x24, [%1, #32];"
+            "stp x25, x26, [%1, #48];"
+            "stp x27, x28, [%1, #64];"
+            "str x29, [%1, #80];"
+            "str x30, [%1, #88];"
+            "mov x2, sp;"
+            "str x2, [%1, #96];"     // SP
+            "adr x3, 1f;"            // PC «сразу после»
+            "str x3, [%1, #104];"    // PC
+            "mov %w0, wzr;"          // ret = 0
+            "b 2f;"
+            "1:"
+            "mov %w0, #1;"           // возвращаемся сюда при restore -> ret = 1
+            "2:"
+            : "=&r"(ret)
+            : "r"(ctx)
+            : "memory", "x2", "x3",
+                "x19","x20","x21","x22","x23","x24","x25","x26","x27","x28"
             );
-
-    // сохраняем стек
-    __asm__ __volatile__(
-            "mov x9, sp\n\t"      // скопировать SP в обычный регистр
-            "str x9, [%0]\n\t"    // записать x9 по адресу stackPtr
-            :
-            : "r"(stackPtr)
-            : "memory", "x9"
-            );
+    return ret;
 }
 
-void restoreContext(void* ctx, void* stackPtr) {
-    __asm__ __volatile__(
-            "ldr x9, [%0]\n\t"    // прочитать сохранённый SP
-            "mov sp, x9\n\t"      // записать в SP
-            :
-            : "r"(stackPtr)
-            : "memory", "x9"
-            );
-
-    __asm__ __volatile__(
-            "ldp x0, x1, [%0, #0];"
-            "ldp x2, x3, [%0, #16];"
-            "ldp x4, x5, [%0, #32];"
-            "ldp x6, x7, [%0, #48];"
-            "ldp x8, x9, [%0, #64];"
-            "ldp x10, x11, [%0, #80];"
-            "ldp x12, x13, [%0, #96];"
-            "ldp x14, x15, [%0, #112];"
-            "ldp x16, x17, [%0, #128];"
-            "ldp x18, x19, [%0, #144];"
-            "ldp x20, x21, [%0, #160];"
-            "ldp x22, x23, [%0, #176];"
-            "ldp x24, x25, [%0, #192];"
-            "ldp x26, x27, [%0, #208];"
-            "ldp x28, x29, [%0, #224];"
-            "ldr x30, [%0, #240];"  // LR
-            "ldr x1, [%0, #248];"   // SP
-            "mov sp, x1;"
-            "ldr x2, [%0, #256];"   // PC
-            "br x2;"                // переходим по адресу PC
+void restoreContext(Context* ctx)
+{
+    __asm__ __volatile__ (
+        // восстановление всех сохранённых регистров
+            "ldp x19, x20, [%0, #0];\n"
+            "ldp x21, x22, [%0, #16];\n"
+            "ldp x23, x24, [%0, #32];\n"
+            "ldp x25, x26, [%0, #48];\n"
+            "ldp x27, x28, [%0, #64];\n"
+            "ldr x29, [%0, #80];\n"    // FP (frame pointer)
+            "ldr x30, [%0, #88];\n"    // LR (link register)
+            "ldr x1,  [%0, #96];\n"    // SP
+            "mov sp, x1;\n"
+            "ldr x2,  [%0, #104];\n"   // PC
+            "br  x2;\n"                // ← безвозвратный прыжок по PC
             :
             : "r"(ctx)
-            : "memory", "x1", "x2"
+            : "memory", "x1", "x2",
+    "x19","x20","x21","x22","x23","x24","x25","x26","x27","x28"
             );
-}
 
+    __builtin_unreachable();
+}
 };

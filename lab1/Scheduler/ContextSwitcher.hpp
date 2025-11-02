@@ -28,6 +28,9 @@
 
 extern "C" {
 
-void saveContext(void* ctx, void* stackPtr);
-void restoreContext(void* ctx, void* stackPtr);
+//void saveContext(void* ctx, void* stackPtr);
+//void restoreContext(void* ctx, void* stackPtr);
+
+int saveContext(Context* ctx);
+void restoreContext(Context* ctx);
 }
