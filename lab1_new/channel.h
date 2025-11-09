@@ -1,11 +1,12 @@
 #pragma once
 #include "fiber.h"
 #include "fl_type.h"
+
 #include <stddef.h>
 
 typedef struct fl_channel {
     fl_value_t* buffer;
-//    void** buffer;
+
     size_t capacity;
     size_t head;
     size_t tail;

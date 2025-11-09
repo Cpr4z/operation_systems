@@ -1,4 +1,6 @@
+#include "constants.h"
 #include "fiber.h"
+
 #include <stdio.h>
 #include <unistd.h>
 
@@ -33,7 +35,7 @@ int main() {
     fl_executor_init(&ex);
 
     heavy_args args = {.start = 0, .end = 5e6, .partial_sum = 0};
-    fl_fiber* f = fl_fiber_create(&ex, heavy_calc, &args, 128 * 1024);
+    fl_fiber* f = fl_fiber_create(&ex, heavy_calc, &args, FIBER_STACK_SIZE);
 
     printf("=== Heavy computation with pause/resume ===\n");
 
@@ -51,6 +53,5 @@ int main() {
         printf("\n[main] Fiber done! Final sum=%ld\n", args.partial_sum);
         fl_fiber_destroy(f);
     }
-
     return 0;
 }

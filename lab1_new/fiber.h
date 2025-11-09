@@ -1,4 +1,5 @@
 #pragma once
+
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,21 +8,23 @@
 typedef void (*fl_fiber_fn)(void*);
 
 typedef enum {
-    FL_CREATED,
-    FL_RUNNING,
-    FL_PAUSED,
-    FL_STOPPED
+    FL_CREATED, // создан
+    FL_RUNNING, // запущен
+    FL_PAUSED, // остановлен, можно возобновить
+    FL_FINISHED // файбер закончил работу, возобновить больше нельзя
 } fl_state;
 
 typedef struct fl_context {
+    // x19–x28 — callee-saved регистры ARM64:
+    // по соглашению вызова их нужно сохранять, если функция их изменяет.
     uint64_t x19, x20;
     uint64_t x21, x22;
     uint64_t x23, x24;
     uint64_t x25, x26;
     uint64_t x27, x28;
-    uint64_t fp;
-    uint64_t lr;
-    uint64_t sp;
+    uint64_t fp; // fp (x29) — frame pointer (указатель на текущий фрейм стека)
+    uint64_t lr; // lr (x30) — link register (адрес возврата, т.е. куда пойдёт ret)
+    uint64_t sp; // sp — указатель стека (stack pointer)
 } fl_context;
 
 struct fl_executor;
@@ -30,14 +33,14 @@ typedef struct fl_fiber {
     fl_context  ctx;
     void*       stack;
     size_t      stack_size;
-    fl_fiber_fn entry;
-    void*       arg;
-    fl_state    state;
+    fl_fiber_fn entry; // исполняемая функция
+    void*       arg; // аргументы для исполняемой файбером функции
+    fl_state    state; // состояние файбера
     struct fl_executor* exec;
 } fl_fiber;
 
 typedef struct fl_executor {
-    fl_context sched_ctx;
+    fl_context sched_ctx; // предыдущий контекст до выполнения файбера
     fl_fiber*  current;
 } fl_executor;
 

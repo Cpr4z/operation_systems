@@ -1,3 +1,4 @@
+#include "constants.h"
 #include "fiber.h"
 #include <stdio.h>
 
@@ -13,8 +14,8 @@ int main() {
     fl_executor ex;
     fl_executor_init(&ex);
 
-    fl_fiber* a = fl_fiber_create(&ex, worker, "A", 64*1024);
-    fl_fiber* b = fl_fiber_create(&ex, worker, "B", 64*1024);
+    fl_fiber* a = fl_fiber_create(&ex, worker, "A", FIBER_STACK_SIZE);
+    fl_fiber* b = fl_fiber_create(&ex, worker, "B", FIBER_STACK_SIZE);
 
     for (;;) {
         int alive = 0;

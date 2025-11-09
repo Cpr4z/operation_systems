@@ -1,6 +1,8 @@
-#include "fiber.h"
 #include "channel.h"
+#include "constants.h"
+#include "fiber.h"
 #include "fl_type.h"
+
 #include <stdio.h>
 
 static void producer(void* arg) {
@@ -31,10 +33,10 @@ int main() {
     fl_executor ex;
     fl_executor_init(&ex);
 
-    fl_channel* ch = fl_chan_create(2);
+    fl_channel* ch = fl_chan_create(CHANNEL_CAPACITY);
 
-    fl_fiber* prod = fl_fiber_create(&ex, producer, ch, 64*1024);
-    fl_fiber* cons = fl_fiber_create(&ex, consumer, ch, 64*1024);
+    fl_fiber* prod = fl_fiber_create(&ex, producer, ch, FIBER_STACK_SIZE);
+    fl_fiber* cons = fl_fiber_create(&ex, consumer, ch, FIBER_STACK_SIZE);
 
     while (1) {
         int alive = 0;
