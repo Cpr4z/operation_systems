@@ -1,12 +1,14 @@
 #include "fiber.h"
 
+#include "constants.h"
+
 #include <stdio.h>
 #include <assert.h>
 
 // функция переключения контекста
-extern void fl_ctx_switch(fl_context*, const fl_context*);
+extern void fl_ctx_switch(fl_context*, const fl_context*) __attribute__((noinline));
 // функция инициализации контекста и последующего запуска файбера
-extern void fl_ctx_make  (fl_context*, void*, void (*)(void));
+extern void fl_ctx_make  (fl_context*, void*, void (*)(void)) __attribute__((noinline));
 
 // __thread - создание этой переменной для каждого потока отдельное
 // каждому потоку отдельный executor
@@ -27,7 +29,7 @@ void fl_executor_init(fl_executor* e) {
 
 fl_fiber* fl_fiber_create(fl_executor* e, fl_fiber_fn fn, void* arg, size_t stack_sz) {
     fl_fiber* f = (fl_fiber*)calloc(1, sizeof(fl_fiber));
-    f->stack_size = stack_sz ? stack_sz : (64 * 1024);
+    f->stack_size = stack_sz ? stack_sz : FIBER_STACK_SIZE;
     f->stack = malloc(f->stack_size);
     assert(f->stack && "no memory for stack");
 
@@ -51,6 +53,9 @@ void fl_fiber_destroy(fl_fiber* f) {
 }
 
 void fl_fiber_resume(fl_executor* e, fl_fiber* f) {
+    assert(f->state != FL_FINISHED && "cannot resume finished fiber");
+    assert(f->state != FL_RUNNING && "fiber is already running");
+
     e->current = f;
     f->state   = FL_RUNNING;
     // приостанавливаем текущий контекст и выполняем контекст то, который был запущен до этого
@@ -77,6 +82,12 @@ void fl_fiber_trampoline(void) {
     f->state = FL_FINISHED;
     e->current = NULL;
     fl_ctx_switch(&f->ctx, &e->sched_ctx);
+}
+
+fl_fiber* fl_fiber_current(void) {
+    fl_executor* e = g_exec_tls;
+    if (!e) return NULL;
+    return e->current;
 }
 
 int fl_fiber_finished(const fl_fiber* f) { return f->state == FL_FINISHED; }

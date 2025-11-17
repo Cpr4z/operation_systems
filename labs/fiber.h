@@ -3,7 +3,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <pthread.h>
 
 typedef void (*fl_fiber_fn)(void*);
 
@@ -47,7 +46,7 @@ typedef struct fl_executor {
 extern __thread fl_executor* g_exec_tls;
 
 void fl_ctx_switch(fl_context* oldc, const fl_context* newc) __attribute__((noinline));
-void fl_ctx_make  (fl_context* c, void* stack_top, void (*trampoline)(void));
+void fl_ctx_make  (fl_context* c, void* stack_top, void (*trampoline)(void)) __attribute__((noinline));
 
 void       fl_executor_init(fl_executor* e);
 fl_fiber*  fl_fiber_create (fl_executor* e, fl_fiber_fn fn, void* arg, size_t stack_sz);
@@ -57,3 +56,5 @@ void       fl_fiber_destroy(fl_fiber* f);
 
 void fl_fiber_trampoline(void);
 int  fl_fiber_finished(const fl_fiber* f);
+
+fl_fiber* fl_fiber_current(void);

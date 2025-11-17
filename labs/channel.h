@@ -1,21 +1,35 @@
 #pragma once
+
 #include "fiber.h"
 #include "fl_type.h"
 
-#include <stddef.h>
+#include <pthread.h>
+
+typedef enum {
+    FL_CH_OPEN,
+    FL_CH_CLOSED,
+} fl_chan_state;
 
 typedef struct fl_channel {
     fl_value_t* buffer;
 
-    size_t capacity;
+    size_t capacity; // емкость буфера
+
+    // указатели для кольцевого буфера
     size_t head;
     size_t tail;
     size_t count;
 
-    fl_fiber* waiting_sender;
-    fl_fiber* waiting_receiver;
+    fl_fiber* waiting_sender; // отправляющий данные файбер
+    fl_fiber* waiting_receiver; // ожидающий данные файбер
 
-    int closed;
+    fl_chan_state state; // состояние канала
+
+    pthread_mutex_t lock;
+
+    // условные переменные
+    pthread_cond_t  can_send;
+    pthread_cond_t  can_recv;
 } fl_channel;
 
 fl_channel* fl_chan_create(size_t capacity);
