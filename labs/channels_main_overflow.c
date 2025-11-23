@@ -8,12 +8,11 @@
 const static int BUFFER_SIZE = 5;
 
 static void producer(void* arg) {
-    fl_channel* ch = (fl_channel*)arg;
-
+    channel_wrapper* ch_wrp = (channel_wrapper*)arg;
     for (int i = 0; i < BUFFER_SIZE; ++i) {
         printf("[producer %p] trying send %d\n", (void*)fl_fiber_current(), i);
 
-        fl_chan_send(ch, fl_val_int(i));
+        fl_chan_send(ch_wrp, fl_val_int(i));
 
         printf("[producer %p] sent %d\n", (void*)fl_fiber_current(), i);
     }
@@ -21,32 +20,30 @@ static void producer(void* arg) {
     fl_fiber_yield();
 
     printf("[producer %p] done\n", (void*)fl_fiber_current());
-    fl_chan_close(ch);
+    fl_chan_close(ch_wrp);
 }
 
 static void producer_overflow(void* arg) {
-    fl_channel* ch = (fl_channel*)arg;
-
+    channel_wrapper* ch_wrp = (channel_wrapper*)arg;
     for (int i = 0; i < BUFFER_SIZE + 1; ++i) {
         printf("[producer %p] trying send %d\n", (void*)fl_fiber_current(), i);
 
-        fl_chan_send(ch, fl_val_int(i));
+        fl_chan_send(ch_wrp, fl_val_int(i));
 
         printf("[producer %p] sent %d\n", (void*)fl_fiber_current(), i);
     }
 
-    fl_fiber_yield();
+//    fl_fiber_yield();
     printf("[producer %p] done\n", (void*)fl_fiber_current());
-    fl_chan_close(ch);
+    fl_chan_close(ch_wrp);
 }
 
 static void consumer(void* arg) {
-    fl_channel* ch = (fl_channel*)arg;
-
+    channel_wrapper* ch_wrp = (channel_wrapper*)arg;
     while (1) {
         printf("[consumer %p] trying recv\n", (void*)fl_fiber_current());
 
-        fl_value_t v = fl_chan_recv(ch);
+        fl_value_t v = fl_chan_recv(ch_wrp);
 
         if (v.type == FL_TYPE_NONE) {
             printf("[consumer %p] channel closed -> exit\n",
@@ -63,12 +60,15 @@ static void consumer(void* arg) {
 int main() {
     fl_executor ex;
     fl_executor_init(&ex);
-
     {
-        fl_channel* channel = fl_chan_create(BUFFER_SIZE);
+        channel_wrapper channelWrapper = fl_chan_create(BUFFER_SIZE);
+        if (!channelWrapper.alive) {
+            printf("Channel creating error\n");
+            return -1;
+        }
 
-        fl_fiber* prod = fl_fiber_create(&ex, producer, channel, FIBER_STACK_SIZE);
-        fl_fiber* cons = fl_fiber_create(&ex, consumer, channel, FIBER_STACK_SIZE);
+        fl_fiber* prod = fl_fiber_create(&ex, producer, &channelWrapper, FIBER_STACK_SIZE);
+        fl_fiber* cons = fl_fiber_create(&ex, consumer, &channelWrapper, FIBER_STACK_SIZE);
 
         fl_fiber* all[] = { prod, cons };
 
@@ -92,16 +92,20 @@ int main() {
             if (!alive) break;
         }
 
-        fl_chan_destroy(channel);
+        fl_chan_destroy(&channelWrapper);
     }
 
     printf("===============================================================\n");
 
     {
-        fl_channel* channel = fl_chan_create(BUFFER_SIZE);
+        channel_wrapper channelWrapper = fl_chan_create(BUFFER_SIZE);
+        if (!channelWrapper.alive) {
+            printf("Channel creating error\n");
+            return -1;
+        }
 
-        fl_fiber* prod = fl_fiber_create(&ex, producer_overflow, channel, FIBER_STACK_SIZE);
-        fl_fiber* cons = fl_fiber_create(&ex, consumer, channel, FIBER_STACK_SIZE);
+        fl_fiber* prod = fl_fiber_create(&ex, producer_overflow, &channelWrapper, FIBER_STACK_SIZE);
+        fl_fiber* cons = fl_fiber_create(&ex, consumer, &channelWrapper, FIBER_STACK_SIZE);
 
         fl_fiber* all[] = { prod, cons };
 
@@ -125,7 +129,7 @@ int main() {
             if (!alive) break;
         }
 
-        fl_chan_destroy(channel);
+        fl_chan_destroy(&channelWrapper);
     }
 
     return 0;
