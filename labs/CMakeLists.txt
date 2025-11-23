@@ -51,3 +51,12 @@ add_executable(fibers_dangerous
         constants.h
         ctx_arm64.S
 )
+
+add_executable(channels_broken_fiber
+        fiber.c
+        channel.c
+        main_channels_broken_fiber.c
+        fl_type.h
+        constants.h
+        ctx_arm64.S
+)

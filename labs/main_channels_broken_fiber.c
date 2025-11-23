@@ -5,27 +5,25 @@
 
 #include <stdio.h>
 
-const static int BUFFER_SIZE = 10;
+const static int BUFFER_SIZE = 5;
 
-static void dangerous_producer(void* arg) {
-    channel_wrapper* ch_wrp = (channel_wrapper*)arg;
+void broken_producer(void* args) {
+    channel_wrapper* ch_wrp = (channel_wrapper*)args;
 
     for (int i = 0; i < BUFFER_SIZE; ++i) {
+        if (i == 3) {
+            fl_fiber_destroy(fl_fiber_current());
+            continue;
+        }
         printf("[producer %p] trying send %d\n", (void*)fl_fiber_current(), i);
         fl_chan_send(ch_wrp, fl_val_int(i));
         printf("[producer %p] sent %d\n", (void*)fl_fiber_current(), i);
     }
 
-    printf("[producer %p] closing channel\n", (void*)fl_fiber_current());
-//    fl_chan_close(ch_wrp);
-    fl_chan_destroy(ch_wrp);
-
-    printf("[producer %p] TRY send after close (should fail)\n", (void*)fl_fiber_current());
-    fl_chan_send(ch_wrp, fl_val_int(777));
 }
 
-static void dangerous_consumer(void* arg) {
-    channel_wrapper* ch_wrp = (channel_wrapper*)arg;
+void broken_consumer(void* args) {
+    channel_wrapper* ch_wrp = (channel_wrapper*)args;
     while (1) {
         printf("[consumer %p] trying recv\n", (void*)fl_fiber_current());
         fl_value_t v = fl_chan_recv(ch_wrp);
@@ -56,10 +54,10 @@ int main() {
         return -1;
     }
 
-    fl_fiber* dangerous_prod = fl_fiber_create(&ex, dangerous_producer, &channelWrapper, FIBER_STACK_SIZE);
-    fl_fiber* dangerous_cons = fl_fiber_create(&ex, dangerous_consumer, &channelWrapper, FIBER_STACK_SIZE);
+    fl_fiber* broken_prod = fl_fiber_create(&ex, broken_producer, &channelWrapper, FIBER_STACK_SIZE);
+    fl_fiber* broken_cons = fl_fiber_create(&ex, broken_consumer, &channelWrapper, FIBER_STACK_SIZE);
 
-    fl_fiber* all[] = { dangerous_prod, dangerous_cons };
+    fl_fiber* all[] = { broken_prod, broken_cons };
 
     while (1) {
         int alive = 0;
@@ -80,6 +78,7 @@ int main() {
 
         if (!alive) break;
     }
+
 
     return 0;
 }

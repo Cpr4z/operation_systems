@@ -4,16 +4,45 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-fl_channel* fl_chan_create(size_t capacity) {
+//fl_channel* fl_chan_create(size_t capacity) {
+//    fl_channel* ch = calloc(1, sizeof(fl_channel));
+//    if (!ch) {
+//        return NULL;
+//    }
+//
+//    ch->buffer = calloc(capacity, sizeof(fl_value_t));
+//    if (!ch->buffer) {
+//        free(ch);
+//        return NULL;
+//    }
+//
+//    ch->capacity = capacity;
+//    ch->head = 0;
+//    ch->tail = 0;
+//    ch->count = 0;
+//    ch->waiting_sender = NULL;
+//    ch->waiting_receiver = NULL;
+//    ch->state = FL_CH_OPEN;
+//
+//    pthread_mutex_init(&ch->lock, NULL);
+//    pthread_cond_init(&ch->can_send, NULL);
+//    pthread_cond_init(&ch->can_recv, NULL);
+//
+//    return ch;
+//}
+
+channel_wrapper fl_chan_create(size_t capacity) {
+    channel_wrapper wrapper;
+    wrapper.alive = 0;
     fl_channel* ch = calloc(1, sizeof(fl_channel));
     if (!ch) {
-        return NULL;
+        return wrapper;
     }
 
     ch->buffer = calloc(capacity, sizeof(fl_value_t));
     if (!ch->buffer) {
         free(ch);
-        return NULL;
+        return wrapper;
     }
 
     ch->capacity = capacity;
@@ -27,12 +56,18 @@ fl_channel* fl_chan_create(size_t capacity) {
     pthread_mutex_init(&ch->lock, NULL);
     pthread_cond_init(&ch->can_send, NULL);
     pthread_cond_init(&ch->can_recv, NULL);
+    wrapper.channel = ch;
+    wrapper.alive = 1;
 
-    return ch;
+    return wrapper;
 }
 
-void fl_chan_destroy(fl_channel* ch) {
-    if (!ch) return;
+void fl_chan_destroy(channel_wrapper* ch_wrp) {
+    if (!ch_wrp || !ch_wrp->alive || !ch_wrp->channel) {
+        return;
+    }
+
+    fl_channel* ch = ch_wrp->channel;
 
     pthread_mutex_destroy(&ch->lock);
     pthread_cond_destroy(&ch->can_send);
@@ -40,10 +75,17 @@ void fl_chan_destroy(fl_channel* ch) {
 
     free(ch->buffer);
     free(ch);
+
+    ch_wrp->alive = 0;
 }
 
-void fl_chan_close(fl_channel* ch) {
-    if (!ch) return;
+void fl_chan_close(channel_wrapper* ch_wrp) {
+    if (!ch_wrp || !ch_wrp->alive || !ch_wrp->channel) {
+        return;
+    }
+
+    fl_channel* ch = ch_wrp->channel;
+
     pthread_mutex_lock(&ch->lock);
     ch->state = FL_CH_CLOSED;
 
@@ -52,7 +94,13 @@ void fl_chan_close(fl_channel* ch) {
     pthread_mutex_unlock(&ch->lock);
 }
 
-void fl_chan_send(fl_channel* ch, fl_value_t value) {
+void fl_chan_send(channel_wrapper* ch_wrp, fl_value_t value) {
+    if (!ch_wrp || !ch_wrp->alive || !ch_wrp->channel) {
+        return;
+    }
+
+    fl_channel* ch = ch_wrp->channel;
+
     fl_executor* e = g_exec_tls;
     assert(e && e->current);
     assert(e->current->state == FL_RUNNING);
@@ -62,7 +110,6 @@ void fl_chan_send(fl_channel* ch, fl_value_t value) {
     if (ch->state == FL_CH_CLOSED) {
         pthread_mutex_unlock(&ch->lock);
         printf("[send] Cannot send, channel is closed!\n");
-//        assert(0 && "send to closed channel");
         return;
     }
 
@@ -73,7 +120,6 @@ void fl_chan_send(fl_channel* ch, fl_value_t value) {
         pthread_mutex_unlock(&ch->lock);
         fl_fiber_yield();
 
-        // если за время прокрутки файберов канал стал невалидным
         if (!ch) {
             printf("[send] Channel has been destroyed while fiber scrolling");
             return;
@@ -86,7 +132,7 @@ void fl_chan_send(fl_channel* ch, fl_value_t value) {
     if (ch->state != FL_CH_OPEN) {
         pthread_mutex_unlock(&ch->lock);
         printf("[send] Cannot send, channel is closed!\n");
-//        assert(0 && "send failed, channel not open");
+        return;
     }
 
     ch->buffer[ch->tail] = value;
@@ -98,7 +144,13 @@ void fl_chan_send(fl_channel* ch, fl_value_t value) {
     pthread_mutex_unlock(&ch->lock);
 }
 
-fl_value_t fl_chan_recv(fl_channel* ch) {
+fl_value_t fl_chan_recv(channel_wrapper* ch_wrp) {
+    if (!ch_wrp || !ch_wrp->alive || !ch_wrp->channel) {
+        return (fl_value_t){FL_TYPE_NONE, {0}};
+    }
+
+    fl_channel* ch = ch_wrp->channel;
+
     fl_executor* e = g_exec_tls;
     assert(e && e->current);
     assert(e->current->state == FL_RUNNING);
@@ -108,6 +160,7 @@ fl_value_t fl_chan_recv(fl_channel* ch) {
     if (ch->state == FL_CH_CLOSED) {
         pthread_mutex_unlock(&ch->lock);
         printf("[receive] Cannot send, channel is closed!\n");
+        return (fl_value_t){FL_TYPE_NONE, {0}};
     }
 
     while (ch->count == 0 && ch->state == FL_CH_OPEN) {
@@ -119,8 +172,8 @@ fl_value_t fl_chan_recv(fl_channel* ch) {
 
         if (!ch) {
             printf("[receive] Channel has been destroyed while fiber scrolling");
+            return (fl_value_t){FL_TYPE_NONE, {0}};
         }
-        // Добавить проверку на то, что канал после всей прокрутки файберов еще жив
         pthread_mutex_lock(&ch->lock);
         ch->waiting_receiver = NULL;
     }
@@ -130,7 +183,6 @@ fl_value_t fl_chan_recv(fl_channel* ch) {
         return (fl_value_t){FL_TYPE_NONE, {0}};
     }
 
-    // добавить проверки на то, что канал еще не закрыт или не разрушен
     fl_value_t val = ch->buffer[ch->head];
     ch->head = (ch->head + 1) % ch->capacity;
     ch->count--;

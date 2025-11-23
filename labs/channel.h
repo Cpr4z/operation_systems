@@ -32,14 +32,20 @@ typedef struct fl_channel {
     pthread_cond_t  can_recv;
 } fl_channel;
 
-fl_channel* fl_chan_create(size_t capacity);
-void fl_chan_destroy(fl_channel* ch);
+typedef struct channel_wrapper {
+    int alive;
+    fl_channel* channel;
+} channel_wrapper;
+
+channel_wrapper fl_chan_create(size_t capacity);
+
+void fl_chan_destroy(channel_wrapper* ch_wrp);
 
 // Отправить значение (блокируется, если буфер полон)
-void fl_chan_send(fl_channel* ch, fl_value_t value);
+void fl_chan_send(channel_wrapper* ch_wrp, fl_value_t value);
 
 // Получить значение (блокируется, если буфер пуст)
-fl_value_t fl_chan_recv(fl_channel* ch);
+fl_value_t fl_chan_recv(channel_wrapper* ch_wrp);
 
 // Закрыть канал
-void fl_chan_close(fl_channel* ch);
+void fl_chan_close(channel_wrapper* ch_wrp);
